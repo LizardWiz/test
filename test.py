@@ -17,7 +17,8 @@ import subprocess
 print("jello world")
 print("jelly world")
 
-child = subprocess.Popen(['wget','https://mega.nz/folder/DfBWGTjA#BFcNX-XcMEnY-cdFDWTx1Q/file/WO43iKLZ'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+#child = subprocess.Popen(['wget','https://mega.nz/folder/DfBWGTjA#BFcNX-XcMEnY-cdFDWTx1Q/file/WO43iKLZ'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+child = subprocess.Popen(['wget','https://mega.nz/folder/DfBWGTjA#BFcNX-XcMEnY-cdFDWTx1Q'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
 print(child.stdout.read())
 #runcmd('wget "https://mega.nz/folder/DfBWGTjA#BFcNX-XcMEnY-cdFDWTx1Q/file/WO43iKLZ"')
