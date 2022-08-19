@@ -9,6 +9,7 @@ import shutil
 import logging
 from Crypto.Cipher import AES
 from Crypto.Util import Counter
+from collections import defaultdict
 from mega.crypto import base64_to_a32, base64_url_decode, decrypt_attr, decrypt_key, a32_to_str, get_chunks, str_to_a32
 from mega.errors import ValidationError, RequestError
 
@@ -93,7 +94,20 @@ def download_file(file_handle,
         shutil.move(temp_output_file.name, output_path)
         return output_path
             
-def get_encryption_key(file_id: str, root_folder: str):
+
+def get_file_something(file_id: str, root_folder: str):
+    data = [{ 'a': 'g', 'g': 1, 'p': file_id }]
+    #data = [{ 'a': 'g', 'p': file_id, 'ssm': 1}]
+    response = requests.post(
+        "https://g.api.mega.co.nz/cs",
+        params={'id': 0,  # self.sequence_num
+                'n': root_folder},
+        data=json.dumps(data)
+    )
+    json_resp = response.json()
+    return json_resp[0]
+
+def get_file_data(file_id: str, root_folder: str):
     data = [{ 'a': 'g', 'g': 1, 'n': file_id }]
     response = requests.post(
         "https://g.api.mega.co.nz/cs",
@@ -139,19 +153,97 @@ def decrypt_node_key(key_str: str, shared_key: str):
     return decrypt_key(encrypted_key, shared_key)
 
 
-(root_folder, shared_enc_key) = parse_folder_url("https://mega.nz/folder/DfBWGTjA#BFcNX-XcMEnY-cdFDWTx1Q")
-shared_key = base64_to_a32(shared_enc_key)
-nodes = get_nodes_in_shared_folder(root_folder)
-for node in nodes:
-    key = decrypt_node_key(node["k"], shared_key)
-    if node["t"] == 0: # Is a file
-        k = (key[0] ^ key[4], key[1] ^ key[5], key[2] ^ key[6], key[3] ^ key[7])
-    elif node["t"] == 1: # Is a folder
-        k = key
-    attrs = decrypt_attr(base64_url_decode(node["a"]), k)
-    file_name = attrs["n"]
-    file_id = node["h"]
-    print("file_name: {}\tfile_id: {}".format(file_name, file_id))
-    if node["t"] == 0:
-        file_data = get_encryption_key(file_id, root_folder)
-        download_file(file_id, key, file_data)
+#(root_folder, shared_enc_key) = parse_folder_url("https://mega.nz/folder/DfBWGTjA#BFcNX-XcMEnY-cdFDWTx1Q")
+#shared_key = base64_to_a32(shared_enc_key)
+#nodes = get_nodes_in_shared_folder(root_folder)
+#for node in nodes:
+#    key = decrypt_node_key(node["k"], shared_key)
+#    if node["t"] == 0: # Is a file
+#        k = (key[0] ^ key[4], key[1] ^ key[5], key[2] ^ key[6], key[3] ^ key[7])
+#    elif node["t"] == 1: # Is a folder
+#        k = key
+#    attrs = decrypt_attr(base64_url_decode(node["a"]), k)
+#    file_name = attrs["n"]
+#    file_id = node["h"]
+#    print("file_name: {}\tfile_id: {}".format(file_name, file_id))
+#    if node["t"] == 0:
+#        file_data = get_encryption_key(file_id, root_folder)
+#        download_file(file_id, key, file_data)
+def get_files(url: str, files: list, directories: dict):
+    (folder, shared_enc_key) = parse_folder_url(url)
+    shared_key = base64_to_a32(shared_enc_key)
+    nodes = get_nodes_in_shared_folder(folder)
+    for node in nodes:
+        key = decrypt_node_key(node["k"], shared_key)
+        if node["t"] == 0: # Is a file
+            k = (key[0] ^ key[4], key[1] ^ key[5], key[2] ^ key[6], key[3] ^ key[7])
+        elif node["t"] == 1: # Is a folder
+            k = key
+        if node["t"] == 0:
+            attrs = decrypt_attr(base64_url_decode(node["a"]), k)
+            #attrs_h = decrypt_attr(base64_url_decode(node["h"]), k)
+            #attrs_p = decrypt_attr(base64_url_decode(node["p"]), k)
+            #attrs_t = decrypt_attr(base64_url_decode(node["t"]), k)
+            #attrs_s = decrypt_attr(base64_url_decode(node["s"]), k)
+            #attrs_fa = decrypt_attr(base64_url_decode(node["fa"]), k)
+            #attrs_ts = decrypt_attr(base64_url_decode(node["ts"]), k)
+            file_name = attrs["n"]
+            file_id = node["h"]
+            parent_id = node["p"]
+            print("file_name: {}\tfile_id: {}\tparent_id: {}".format(file_name, file_id, parent_id))
+            #print("file_name: {}\tfile_id: {}".format(file_name, file_id))
+            file_data = get_file_data(file_id, folder)
+            #attrs_ts = decrypt_attr(base64_url_decode(file_data["at"]), k)
+            #attrs_ts1 = decrypt_attr(base64_url_decode(attrs_ts["c"]), k)
+            #file_something = get_file_something(node["i"], folder)
+            files["files"].append({"size": file_data["s"], "file_name": file_name, "file_id": file_id, "parent_id": parent_id, "file_data": file_data})
+            files["total_size"] += file_data["s"]
+            files["total_files"] += 1
+        else:
+            attrs = decrypt_attr(base64_url_decode(node["a"]), k)
+            file_name = attrs["n"]
+            file_id = node["h"]
+            parent_id = node["p"]
+            directories[file_id] = {"file_name": file_name, "parent_id": parent_id}
+            print("file_name: {}\tfile_id: {}\tparent_id: {}".format(file_name, file_id, parent_id))
+            #print(attrs)
+
+def get_full_path(file_id: str, directories: dict):
+    full_path = ""
+    if file_id in directories:
+        full_path = directories[file_id]["file_name"] + "/"
+        parent_id = directories[file_id]["parent_id"]
+
+        while parent_id in directories:
+            full_path = directories[parent_id]["file_name"] + "/" + full_path
+            parent_id = directories[parent_id]["parent_id"]
+
+    return full_path
+
+file_list = {"total_size": 0, "total_files": 0, "files": []}
+directories = {}
+get_files("https://mega.nz/folder/O8Yi3bKK#Rqh30Iu-t3zIFxMrnTp3Nw", file_list, directories)
+for i in file_list["files"]:
+    print(get_full_path(i["parent_id"], directories) + i["file_name"])
+
+#(root_folder, shared_enc_key) = parse_folder_url("https://mega.nz/folder/O8Yi3bKK#Rqh30Iu-t3zIFxMrnTp3Nw")
+#shared_key = base64_to_a32(shared_enc_key)
+#(root_folder, shared_enc_key) = parse_folder_url("https://mega.nz/folder/O8Yi3bKK#Rqh30Iu-t3zIFxMrnTp3Nw/folder/DgoFgQyK")
+#shared_key = base64_to_a32(shared_enc_key)
+#nodes = get_nodes_in_shared_folder(root_folder)
+#for node in nodes:
+#    key = decrypt_node_key(node["k"], shared_key)
+#    if node["t"] == 0: # Is a file
+#        k = (key[0] ^ key[4], key[1] ^ key[5], key[2] ^ key[6], key[3] ^ key[7])
+#    elif node["t"] == 1: # Is a folder
+#        k = key
+
+
+#h: ID of node <ID-NODE>
+#p: ID of parent node (directory)
+#u: Owner of node
+#t: type of node (0: file, 1: directory, 2: Root, 3: Inbox, 4: Trash bin)
+#a: Attributes (name)
+#k: Key <KEY-NODE>
+#s: Size of node
+#ts: Last modified time
