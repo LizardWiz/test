@@ -94,19 +94,6 @@ def download_file(file_handle,
         shutil.move(temp_output_file.name, output_path)
         return output_path
             
-
-def get_file_something(file_id: str, root_folder: str):
-    data = [{ 'a': 'g', 'g': 1, 'p': file_id }]
-    #data = [{ 'a': 'g', 'p': file_id, 'ssm': 1}]
-    response = requests.post(
-        "https://g.api.mega.co.nz/cs",
-        params={'id': 0,  # self.sequence_num
-                'n': root_folder},
-        data=json.dumps(data)
-    )
-    json_resp = response.json()
-    return json_resp[0]
-
 def get_file_data(file_id: str, root_folder: str):
     data = [{ 'a': 'g', 'g': 1, 'n': file_id }]
     response = requests.post(
@@ -181,21 +168,12 @@ def get_files(url: str, files: list, directories: dict):
             k = key
         if node["t"] == 0:
             attrs = decrypt_attr(base64_url_decode(node["a"]), k)
-            #attrs_h = decrypt_attr(base64_url_decode(node["h"]), k)
-            #attrs_p = decrypt_attr(base64_url_decode(node["p"]), k)
-            #attrs_t = decrypt_attr(base64_url_decode(node["t"]), k)
-            #attrs_s = decrypt_attr(base64_url_decode(node["s"]), k)
-            #attrs_fa = decrypt_attr(base64_url_decode(node["fa"]), k)
-            #attrs_ts = decrypt_attr(base64_url_decode(node["ts"]), k)
             file_name = attrs["n"]
             file_id = node["h"]
             parent_id = node["p"]
             print("file_name: {}\tfile_id: {}\tparent_id: {}".format(file_name, file_id, parent_id))
             #print("file_name: {}\tfile_id: {}".format(file_name, file_id))
             file_data = get_file_data(file_id, folder)
-            #attrs_ts = decrypt_attr(base64_url_decode(file_data["at"]), k)
-            #attrs_ts1 = decrypt_attr(base64_url_decode(attrs_ts["c"]), k)
-            #file_something = get_file_something(node["i"], folder)
             files["files"].append({"size": file_data["s"], "file_name": file_name, "file_id": file_id, "parent_id": parent_id, "file_data": file_data})
             files["total_size"] += file_data["s"]
             files["total_files"] += 1
